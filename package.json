@@ -11,6 +11,7 @@
     "core-js": "^3.6.5",
     "monaco-editor": "^0.23.0",
     "monaco-editor-webpack-plugin": "^3.0.1",
+    "skulpt": "^1.0.0",
     "vue": "^2.6.11"
   },
   "devDependencies": {

@@ -1,12 +1,16 @@
 <template>
   <div id="app">
-    <pre>{{ code }}</pre>
+    <pre>req:{{ code }}</pre>
     <div id="monaco" ref="monacoEditor"></div>
   </div>
 </template>
 
 <script>
 import * as monaco from "monaco-editor";
+// eslint-disable-next-line
+import skulpt from "skulpt/dist/skulpt.min";
+// eslint-disable-next-line
+import stdLib from "skulpt/dist/skulpt-stdlib";
 
 export default {
   name: "App",
@@ -45,6 +49,67 @@ export default {
         },
       },
     };
+  },
+  methods: {
+    eval() {
+      // console.log(this.editor.getModel().getValue());
+      const model = this.editor.getModel();
+      const value = model.getValue();
+      const base = `req=${JSON.stringify(this.code)} \n`;
+      console.log(base);
+      /*eslint-disable*/
+      function builtinRead(x) {
+        if (
+          Sk.builtinFiles === undefined ||
+          Sk.builtinFiles["files"][x] === undefined
+        )
+          throw "File not found: '" + x + "'";
+        return Sk.builtinFiles["files"][x];
+      }
+      Sk.configure({
+        output: (x) => console.log("a", x),
+        read: (x) => builtinRead(x),
+      });
+      // console.log(Sk.builtinFiles);
+      // Sk.importModule("skulpt/src/builtin/sys");
+      // console.log("asd", Sk.importMainWithBody("<stdin>", false, value, true));
+      Sk.misceval
+        .asyncToPromise(function() {
+          return Sk.importMainWithBody("<stdin>", false, base + value, true);
+        })
+        .then(
+          function() {
+            var markers = [];
+            monaco.editor.setModelMarkers(model, "python", markers);
+          },
+          function(err) {
+            console.log(err.toString(), err);
+            // if (err.args.v[0].v != "No module named sys") {
+            let markers = [];
+            if (err.traceback[0].lineno && err.traceback[0].colno) {
+              markers.push({
+                severity: monaco.MarkerSeverity.Error,
+                startLineNumber: err.traceback[0].lineno,
+                startColumn: err.traceback[0].colno + 1,
+                endLineNumber: err.traceback[0].lineno,
+                endColumn: err.traceback[0].colno + 1,
+                message: err.args.v[0].v,
+              });
+            } else {
+              markers.push({
+                severity: monaco.MarkerSeverity.Error,
+                startLineNumber: err.traceback[0].lineno,
+                startColumn: 0,
+                endLineNumber: err.traceback[0].lineno,
+                endColumn: 1000,
+                message: err.args.v[0].v,
+              });
+            }
+            monaco.editor.setModelMarkers(model, "python", markers);
+            // }
+          }
+        );
+    },
   },
   mounted() {
     const keywords = [
@@ -264,7 +329,7 @@ export default {
         },
       });
     }
-    ShowAutocompletion(this.code);
+    ShowAutocompletion({ req: this.code });
 
     this.editor = monaco.editor.create(this.$refs.monacoEditor, {
       value: "",
@@ -288,6 +353,12 @@ export default {
           });
         }
       }
+    });
+    let handle = null;
+    this.editor.getModel().onDidChangeContent(() => {
+      clearTimeout(handle);
+      handle = setTimeout(() => this.eval(), 500);
+      console.log("change");
     });
   },
 };
