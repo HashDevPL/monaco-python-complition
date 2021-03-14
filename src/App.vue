@@ -189,7 +189,7 @@ export default {
       // Register object that will return autocomplete items
       monaco.languages.registerCompletionItemProvider("python", {
         // Run this function when the period or open parenthesis is typed (and anything after a space)
-        triggerCharacters: ["."],
+        triggerCharacters: [".", "["],
 
         // Function to generate autocompletion results
         provideCompletionItems: function(model, position) {
@@ -201,11 +201,12 @@ export default {
             endColumn: position.column,
           });
           const words = last_chars.replace("\t", "").split(" ");
-          const active_typing = words[words.length - 1]; // What the user is currently typing (everything after the last space)
+          let active_typing = words[words.length - 1]; // What the user is currently typing (everything after the last space)
 
           // If the last character typed is a period then we need to look at member objects of the obj object
-          const is_member =
-            active_typing.charAt(active_typing.length - 1) == ".";
+          const is_member = active_typing
+            .charAt(active_typing.length - 1)
+            .match(/\.|\[/);
 
           // Array of autocompletion results
           const result = [];
@@ -215,16 +216,21 @@ export default {
           let prefix = "";
 
           if (is_member) {
+            const anotation = active_typing.substr(-1) == "[" ? "[" : ".";
+            active_typing = active_typing
+              .replaceAll('"', "")
+              .replaceAll("[", ".")
+              .replaceAll("]", "");
             // Is a member, get a list of all members, and the prefix
             const parents = active_typing
               .substring(0, active_typing.length - 1)
-              .split(".");
+              .split(/\.|\[/);
             last_token = obj[parents[0]];
             prefix = parents[0];
 
             parents.map((item) => {
               if (last_token.hasOwnProperty(item)) {
-                prefix += "." + item;
+                prefix += anotation + item;
                 last_token = last_token[item];
               } else {
                 // Not valid
@@ -232,7 +238,7 @@ export default {
               }
             });
 
-            prefix += ".";
+            prefix += anotation;
           }
 
           // Get all the child properties of the last token
@@ -247,7 +253,7 @@ export default {
               result.push({
                 label: prefix + prop,
                 kind: monaco.languages.CompletionItemKind.Text,
-                insertText: prop,
+                insertText: prefix.includes("[") ? `"${prop}"` : prop,
               });
             }
           }
@@ -266,6 +272,22 @@ export default {
       theme: "vs-dark",
       roundedSelection: false,
       scrollBeyondLastLine: false,
+    });
+    this.editor.onDidChangeCursorPosition((e) => {
+      if (e.source == "snippet") {
+        const value = this.editor.getModel().getValueInRange({
+          startLineNumber: e.position.lineNumber,
+          startColumn: 0,
+          endLineNumber: e.position.lineNumber,
+          endColumn: e.position.column + 1,
+        });
+        if (value.match(/"]$/)) {
+          this.editor.setPosition({
+            lineNumber: e.position.lineNumber,
+            column: e.position.column + 1,
+          });
+        }
+      }
     });
   },
 };
